@@ -1,0 +1,19 @@
+{
+  "name": "mopixel-lossless",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@jsquash/oxipng": "2.3.0",
+    "fflate": "^0.8.2",
+    "svgo": "^4.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}

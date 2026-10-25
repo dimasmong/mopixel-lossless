@@ -1,0 +1,11 @@
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ['@jsquash/oxipng', 'svgo']
+  },
+  build: {
+    target: 'es2022',
+    assetsInlineLimit: 0
+  }
+});
