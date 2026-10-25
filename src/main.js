@@ -1,5 +1,6 @@
 import './style.css';
 import { zipSync } from 'fflate';
+import { language, t, applyTranslations, setLanguage } from './i18n.js';
 
 const $ = (selector) => document.querySelector(selector);
 const els = {
@@ -9,7 +10,8 @@ const els = {
   statAfter: $('#statAfter'), statSaved: $('#statSaved'),
   progressBlock: $('#progressBlock'), progressLabel: $('#progressLabel'),
   progressPercent: $('#progressPercent'), progressFill: $('#progressFill'),
-  clearBtn: $('#clearBtn'), downloadAllBtn: $('#downloadAllBtn'), toast: $('#toast')
+  clearBtn: $('#clearBtn'), downloadAllBtn: $('#downloadAllBtn'), toast: $('#toast'),
+  lang: $('#languageSelect'), theme: $('#themeToggle'), themeLabel: $('#themeLabel')
 };
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -34,7 +36,7 @@ function createWorker() {
     else item.reject(new Error(data.error));
   };
   worker.onerror = () => {
-    for (const item of pending.values()) item.reject(new Error('Mesin kompresi gagal dimuat.'));
+    for (const item of pending.values()) item.reject(new Error(t('workerError')));
     pending.clear();
     worker.terminate();
     worker = null;
@@ -56,7 +58,7 @@ function formatBytes(num) {
   let value = num;
   let index = -1;
   do { value /= 1024; index += 1; } while (value >= 1024 && index < units.length - 1);
-  return `${value.toLocaleString('id-ID', { maximumFractionDigits: value < 10 ? 2 : 1 })} ${units[index]}`;
+  return `${value.toLocaleString(language() === 'en' ? 'en-US' : 'id-ID', { maximumFractionDigits: value < 10 ? 2 : 1 })} ${units[index]}`;
 }
 
 function extOf(fileName) { return fileName.split('.').pop()?.toLowerCase() || ''; }
@@ -83,7 +85,7 @@ const escapeText = (value) => String(value).replace(/[&<>"']/g, (char) => ({
 function addFiles(files) {
   const images = Array.from(files).filter((file) => isImageFile(file) && file.size > 0);
   const excluded = Array.from(files).length - images.length;
-  if (excluded) notify(`${excluded} file dilewati karena kosong atau bukan gambar.`);
+  if (excluded) notify(t('excluded', { count: excluded }));
   if (!images.length) return;
 
   for (const file of images) {
@@ -151,12 +153,12 @@ async function runQueue() {
 
 function fileStatus(entry) {
   switch (entry.status) {
-    case 'waiting': return ['Menunggu', 'neutral'];
-    case 'processing': return ['Memproses…', 'processing'];
-    case 'saved': return ['Berhasil dioptimalkan', 'success'];
-    case 'unchanged': return ['Sudah optimal', 'neutral'];
-    case 'unsupported': return ['Asli dipertahankan', 'neutral'];
-    case 'error': return ['Gagal • File asli aman', 'warning'];
+    case 'waiting': return [t('waiting'), 'neutral'];
+    case 'processing': return [t('processing'), 'processing'];
+    case 'saved': return [t('optimized'), 'success'];
+    case 'unchanged': return [t('unchanged'), 'neutral'];
+    case 'unsupported': return [t('original'), 'neutral'];
+    case 'error': return [t('failed'), 'warning'];
     default: return ['—', 'neutral'];
   }
 }
@@ -175,8 +177,8 @@ function renderFiles() {
       <div class="file-data"><div class="file-title" title="${escapeText(entry.file.name)}">${escapeText(entry.file.name)}</div>
       <div class="file-meta"><span class="file-ext">${readableKind}</span><span>${formatBytes(entry.file.size)} <span class="right-arrow">→</span> ${formatBytes(entry.output.size)}</span></div></div>
       <div class="file-outcome"><span class="file-status ${statusClass}"><span class="status-indicator"></span>${statusLabel}</span>
-      ${saved ? `<span class="file-saved">−${percent.toFixed(1)}% · Hemat ${formatBytes(saved)}</span>` : (entry.status === 'unsupported' ? '<span class="file-note">Belum ada optimizer lossless</span>' : '')}</div>
-      <button class="file-download" data-download="${entry.id}" ${['waiting', 'processing'].includes(entry.status) ? 'disabled' : ''} title="Download file" aria-label="Download ${escapeText(entry.file.name)}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v4h16v-4"/></svg></button>
+      ${saved ? `<span class="file-saved">−${percent.toFixed(1)}% · ${t('saved', { value: formatBytes(saved) })}</span>` : (entry.status === 'unsupported' ? `<span class="file-note">${t('notOptimizable')}</span>` : '')}</div>
+      <button class="file-download" data-download="${entry.id}" ${['waiting', 'processing'].includes(entry.status) ? 'disabled' : ''} title="${t('downloading', { name: escapeText(entry.file.name) })}" aria-label="${t('downloading', { name: escapeText(entry.file.name) })}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v4h16v-4"/></svg></button>
     </div>`;
   }).join('');
 }
@@ -189,12 +191,12 @@ function renderAll() {
   const completed = entries.filter((entry) => !['waiting', 'processing'].includes(entry.status)).length;
   const isProcessing = count > 0 && completed < count;
   els.fileCount.textContent = `(${count})`;
-  els.statCount.textContent = count.toLocaleString('id-ID');
+  els.statCount.textContent = count.toLocaleString(language() === 'en' ? 'en-US' : 'id-ID');
   els.statBefore.textContent = formatBytes(original);
   els.statAfter.textContent = formatBytes(current);
   els.statSaved.textContent = formatBytes(original - current);
   els.progressBlock.hidden = !isProcessing;
-  els.progressLabel.textContent = `Mengoptimalkan gambar… ${completed} dari ${count}`;
+  els.progressLabel.textContent = t('processingProgress', { done: completed, total: count });
   const progress = count ? Math.round(100 * completed / count) : 0;
   els.progressPercent.textContent = `${progress}%`;
   els.progressFill.style.width = `${progress}%`;
@@ -224,7 +226,7 @@ async function downloadAll() {
   const button = els.downloadAllBtn;
   const previous = button.innerHTML;
   button.disabled = true;
-  button.textContent = 'Membuat ZIP…';
+  button.textContent = t('zipping');
   try {
     const archive = {};
     const used = new Set();
@@ -240,9 +242,9 @@ async function downloadAll() {
     }
     const zipped = zipSync(archive, { level: 0 });
     triggerDownload(new Blob([zipped], { type: 'application/zip' }), 'MoPixel-lossless-images.zip');
-    notify('ZIP berhasil dibuat dan siap diunduh.');
+    notify(t('zipSuccess'));
   } catch (error) {
-    notify(`Tidak bisa membuat ZIP: ${error.message}`);
+    notify(t('zipFailed', { error: error.message }));
   } finally {
     button.innerHTML = previous;
     renderAll();
@@ -253,7 +255,7 @@ function clearAll() {
   batchToken++;
   if (worker) worker.terminate();
   worker = null;
-  for (const callback of pending.values()) callback.reject(new Error('Dibatalkan.'));
+  for (const callback of pending.values()) callback.reject(new Error(t('cancelled')));
   pending.clear();
   for (const entry of entries) { if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl); }
   entries.length = 0;
@@ -285,4 +287,32 @@ els.downloadAllBtn.addEventListener('click', downloadAll);
 // Files dragged anywhere in the page should not accidentally navigate away.
 window.addEventListener('dragover', (event) => event.preventDefault());
 window.addEventListener('drop', (event) => event.preventDefault());
+renderAll();
+
+
+// User preferences: English and Light are defaults on a fresh browser.
+// Reuse previous explicit choices when available, without system-theme auto-switching.
+let theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+function updateTheme() {
+  document.documentElement.dataset.theme = theme;
+  const isDark = theme === 'dark';
+  const tooltip = t(isDark ? 'switchToLight' : 'switchToDark');
+  els.theme.setAttribute('aria-label', tooltip);
+  els.theme.title = tooltip;
+  els.theme.setAttribute('aria-pressed', String(isDark));
+  els.themeLabel.textContent = t(isDark ? 'themeDark' : 'themeLight');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#15192a' : '#f6f8fc');
+}
+els.lang.addEventListener('change', (event) => {
+  setLanguage(event.target.value);
+  updateTheme();
+  renderAll(); // Rerender progress, file statuses, filenames, and byte locales.
+});
+els.theme.addEventListener('click', () => {
+  theme = theme === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('mopixel-theme', theme); } catch {}
+  updateTheme();
+});
+applyTranslations();
+updateTheme();
 renderAll();
